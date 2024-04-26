@@ -1,5 +1,13 @@
 #include "main.h"
+#include "lemlib/api.hpp"
 
+// constants
+const int DRIVE_SPEED = 127;
+
+// controller definition
+pros::Controller controller(pros::E_CONTROLLER_MASTER);
+
+// motor definitions
 pros::Motor left_front(20);
 pros::Motor left_middle(19);
 pros::Motor left_back(9);
@@ -8,22 +16,83 @@ pros::Motor right_front(-15);
 pros::Motor right_middle(-14);
 pros::Motor right_back(-5);
 
+// motor GROUP definitions
+pros::Motor_Group left_motors({
+	left_front
+	, left_middle
+	, left_back
+});
 
-/**
- * A callback function for LLEMU's center button.
- *
- * When this callback is fired, it will toggle line 2 of the LCD text between
- * "I was pressed!" and nothing.
- */
-void on_center_button() {
-	static bool pressed = false;
-	pressed = !pressed;
-	if (pressed) {
-		pros::lcd::set_text(2, "I was pressed!");
-	} else {
-		pros::lcd::clear_line(2);
-	}
-}
+pros::Motor_Group right_motors({
+	right_front
+	, right_middle
+	, right_back
+});
+
+// "tracking wheel" (rotation sensor) encoder definitions
+/** TODO: find port of rotation sensor! */
+pros::Rotation rot_tracking_wheel(0);
+
+// inertial sensor definitions
+/** TODO: find port of inertial sensor! */
+pros::Imu inertial_sensor(0);
+
+// LemLib structs
+lemlib::Drivetrain_t drivetrain {
+	&left_motors
+	, &right_motors
+	, 12.5				// width in inches!
+	, 4.125				// 4" omni-wheels
+	, 600				// blue cartridge (600 rpm) - direct drive
+};
+
+lemlib::TrackingWheel h_track_wheel_1(
+	&rot_tracking_wheel
+	, 3.25
+	, 0 /** TODO: find the vertical component of the distance from the geometric center! */	
+);
+
+lemlib::OdomSensors_t sensors { 
+	nullptr							// vertical tracking wheel 1
+	, nullptr						// vertical tracking wheel 2
+	, &h_track_wheel_1				// horiz tracking wheel 1
+	, nullptr						// horiz tracking wheel 2
+	, &inertial_sensor				// inertial sensor
+};
+
+// i love PID!
+
+// forward/backward PID
+lemlib::ChassisController_t lateralController {
+    8, // kP
+    30, // kD
+    1, // smallErrorRange
+    100, // smallErrorTimeout
+    3, // largeErrorRange
+    500, // largeErrorTimeout
+    5 // slew rate
+};
+ 
+// turning PID
+lemlib::ChassisController_t angularController {
+    4, // kP
+    40, // kD
+    1, // smallErrorRange
+    100, // smallErrorTimeout
+    3, // largeErrorRange
+    500, // largeErrorTimeout
+    0 // slew rate
+};
+
+// actual lemlib chassis object
+lemlib::Chassis chassis(
+	drivetrain
+	, lateralController
+	, angularController
+	, sensors
+);
+
+
 
 /**
  * Runs initialization code. This occurs as soon as the program is started.
@@ -32,10 +101,10 @@ void on_center_button() {
  * to keep execution time for this mode under a few seconds.
  */
 void initialize() {
-	pros::lcd::initialize();
-	pros::lcd::set_text(1, "Hello PROS User!");
+	// LEAVE THIS HERE
+	chassis.calibrate();
 
-	pros::lcd::register_btn1_cb(on_center_button);
+	pros::lcd::initialize();
 }
 
 /**
@@ -83,20 +152,13 @@ void autonomous() {}
  * task, not resume it from where it left off.
  */
 void opcontrol() {
-	pros::Controller master(pros::E_CONTROLLER_MASTER);
-	pros::Motor left_mtr(1);
-	pros::Motor right_mtr(2);
-
 	while (true) {
-		pros::lcd::print(0, "%d %d %d", (pros::lcd::read_buttons() & LCD_BTN_LEFT) >> 2,
-		                 (pros::lcd::read_buttons() & LCD_BTN_CENTER) >> 1,
-		                 (pros::lcd::read_buttons() & LCD_BTN_RIGHT) >> 0);
-		int left = master.get_analog(ANALOG_LEFT_Y);
-		int right = master.get_analog(ANALOG_RIGHT_Y);
+		// driver control
+		
+		left_motors.move((controller.get_analog(ANALOG_LEFT_Y) / 127.0) * DRIVE_SPEED);
+		left_motors.move((controller.get_analog(ANALOG_RIGHT_Y) / 127.0) * DRIVE_SPEED);
 
-		left_mtr = left;
-		right_mtr = right;
-
+		// delay so system resources don't go nyooom
 		pros::delay(20);
 	}
 }
