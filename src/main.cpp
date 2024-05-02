@@ -1,5 +1,10 @@
 #include "main.h"
 #include "lemlib/api.hpp"
+#include <map>
+
+/**
+ * TODO: move ALL of this to separate files!
+*/
 
 // constants
 const int DRIVE_SPEED = 127;
@@ -8,8 +13,8 @@ const int DRIVE_SPEED = 127;
 pros::Controller controller(pros::E_CONTROLLER_MASTER);
 
 // motor definitions
-pros::Motor left_front(20);
-pros::Motor left_middle(19);
+pros::Motor left_front(19);
+pros::Motor left_middle(20);
 pros::Motor left_back(9);
 
 pros::Motor right_front(-15);
@@ -31,11 +36,11 @@ pros::Motor_Group right_motors({
 
 // "tracking wheel" (rotation sensor) encoder definitions
 /** TODO: find port of rotation sensor! */
-pros::Rotation rot_tracking_wheel(0);
+pros::Rotation h_track_wheel_rot(18);
 
 // inertial sensor definitions
 /** TODO: find port of inertial sensor! */
-pros::Imu inertial_sensor(0);
+pros::Imu inertial_sensor(17);
 
 // LemLib structs
 lemlib::Drivetrain_t drivetrain {
@@ -47,7 +52,7 @@ lemlib::Drivetrain_t drivetrain {
 };
 
 lemlib::TrackingWheel h_track_wheel_1(
-	&rot_tracking_wheel
+	&h_track_wheel_rot
 	, 3.25
 	, 0 /** TODO: find the vertical component of the distance from the geometric center! */	
 );
@@ -92,6 +97,43 @@ lemlib::Chassis chassis(
 	, sensors
 );
 
+struct Params {
+	lemlib::Chassis* myChassis;
+	pros::Rotation* myTrackWheel;
+};
+
+void tank() {
+	left_motors.move((controller.get_analog(ANALOG_LEFT_Y) / 127.0) * DRIVE_SPEED);
+	right_motors.move((controller.get_analog(ANALOG_RIGHT_Y) / 127.0) * DRIVE_SPEED);
+}
+
+void arcade() {
+	int move = controller.get_analog(ANALOG_LEFT_Y);
+	int turn = controller.get_analog(ANALOG_RIGHT_X);
+
+	// idk if this will break?
+	left_motors.move(((move + turn) / 127.0) * DRIVE_SPEED);
+	right_motors.move(((move - turn) / 127.0) * DRIVE_SPEED);
+}
+
+void screenTaskFunc(void* params) {
+	Params* myParams = (Params *)params;
+	lemlib::Chassis* myChassis = (lemlib::Chassis *)(myParams->myChassis);
+	pros::Rotation* myTrackWheel = (pros::Rotation *)(myParams->myTrackWheel);
+
+	while (true) {
+		pros::lcd::print(1, "IMU Pos X: %f", myChassis->getPose().x);
+		pros::lcd::print(2, "IMU Pos Y: %f", myChassis->getPose().y);
+		pros::lcd::print(3, "IMU Theta: %f", myChassis->getPose().theta);
+
+		pros::delay(20);
+	}
+}
+
+
+// ---------------------------------------------
+// --------- actual pros functions -------------
+// ---------------------------------------------
 
 
 /**
@@ -105,6 +147,13 @@ void initialize() {
 	chassis.calibrate();
 
 	pros::lcd::initialize();
+	
+	// resets tracking wheel rotation sensor
+	h_track_wheel_rot.reset_position();
+
+	Params params = {&chassis, &h_track_wheel_rot};
+
+	pros::Task screenTask(screenTaskFunc, &params);
 }
 
 /**
@@ -153,11 +202,16 @@ void autonomous() {}
  */
 void opcontrol() {
 	while (true) {
-		// driver control
+		// driver control -- tank bc codemygame is coding!
 		
-		left_motors.move((controller.get_analog(ANALOG_LEFT_Y) / 127.0) * DRIVE_SPEED);
-		left_motors.move((controller.get_analog(ANALOG_RIGHT_Y) / 127.0) * DRIVE_SPEED);
+		arcade();
 
+		// printing stuff that i can't pass to screenTask for some dumb reason
+		pros::lcd::print(4, "Tracking Wheel Angle: %d", h_track_wheel_rot.get_angle() / 100);
+		pros::lcd::print(5, "Tracking Wheel Position: %d", h_track_wheel_rot.get_position() / 100);
+		pros::lcd::print(6, "Tracking Wheel Velocity: %d", h_track_wheel_rot.get_velocity());
+		pros::lcd::print(7, "IMU Heading: %f", inertial_sensor.get_heading());
+		
 		// delay so system resources don't go nyooom
 		pros::delay(20);
 	}
