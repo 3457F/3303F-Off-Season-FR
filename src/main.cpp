@@ -1,3 +1,5 @@
+// 44.5 cm "height"
+
 #include "main.h"
 #include "lemlib/api.hpp"
 #include <map>
@@ -51,10 +53,11 @@ lemlib::Drivetrain_t drivetrain {
 	, 600				// blue cartridge (600 rpm) - direct drive
 };
 
+// ~2.5cm away
 lemlib::TrackingWheel h_track_wheel_1(
 	&h_track_wheel_rot
 	, 3.25
-	, 0 /** TODO: find the vertical component of the distance from the geometric center! */	
+	, 0.984 /** TODO: find the vertical component of the distance from the geometric center! */	
 );
 
 lemlib::OdomSensors_t sensors { 
@@ -68,9 +71,12 @@ lemlib::OdomSensors_t sensors {
 // i love PID!
 
 // forward/backward PID
+// kP 5-> a lil hesitation; undershot tho
+// kP 7 -> GETS THERE!; a lil hesitation
+// kP 8 -> finally oscillation
 lemlib::ChassisController_t lateralController {
     8, // kP
-    30, // kD
+    1, // kD
     1, // smallErrorRange
     100, // smallErrorTimeout
     3, // largeErrorRange
@@ -185,7 +191,9 @@ void competition_initialize() {}
  * will be stopped. Re-enabling the robot will restart the task, not re-start it
  * from where it left off.
  */
-void autonomous() {}
+void autonomous() {
+	chassis.moveTo(0, -24, 1000);
+}
 
 /**
  * Runs the operator control code. This function will be started in its own task
