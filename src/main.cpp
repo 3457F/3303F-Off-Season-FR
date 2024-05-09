@@ -1,12 +1,9 @@
-// 44.5 cm "height"
+// wheelbase 44.5cm / 17.5in
+// track width 12 and 13/16 in
 
 #include "main.h"
 #include "lemlib/api.hpp"
 #include <map>
-
-/**
- * TODO: move ALL of this to separate files!
-*/
 
 // constants
 const int DRIVE_SPEED = 127;
@@ -24,17 +21,9 @@ pros::Motor right_middle(-14);
 pros::Motor right_back(-5);
 
 // motor GROUP definitions
-pros::Motor_Group left_motors({
-	left_front
-	, left_middle
-	, left_back
-});
+pros::Motor_Group left_motors({left_front, left_middle, left_back});
 
-pros::Motor_Group right_motors({
-	right_front
-	, right_middle
-	, right_back
-});
+pros::Motor_Group right_motors({right_front, right_middle, right_back});
 
 // "tracking wheel" (rotation sensor) encoder definitions
 /** TODO: find port of rotation sensor! */
@@ -44,56 +33,65 @@ pros::Rotation h_track_wheel_rot(18);
 /** TODO: find port of inertial sensor! */
 pros::Imu inertial_sensor(17);
 
-// LemLib structs
-lemlib::Drivetrain_t drivetrain {
+// // LemLib structs
+// lemlib::Drivetrain_t drivetrain {
+// 	&left_motors
+// 	, &right_motors
+// 	, 12.5				// width in inches!
+// 	, 4.125				// 4" omni-wheels
+// 	, 600				// blue cartridge (600 rpm) - direct drive
+// };
+
+lemlib::Drivetrain drivetrain{
 	&left_motors
-	, &right_motors
-	, 12.5				// width in inches!
-	, 4.125				// 4" omni-wheels
-	, 600				// blue cartridge (600 rpm) - direct drive
+	, &right_motors //
+	, 12 + (13 / 16) // track width
+	, 4.125 				// wheel size
+	, 600 // blue cartridge (600 rpm) - direct drive
+	, 2 // horizontal drift
 };
 
 // ~2.5cm away
 lemlib::TrackingWheel h_track_wheel_1(
-	&h_track_wheel_rot
-	, 3.25
-	, 0.984 /** TODO: find the vertical component of the distance from the geometric center! */	
+	&h_track_wheel_rot		// pointer to the rotation sensor
+	, 3.25					// size of tracking wheel
+	, -0.25 				// vertical offset—ESSENTIALLY 0!
 );
 
-lemlib::OdomSensors_t sensors { 
-	nullptr							// vertical tracking wheel 1
-	, nullptr						// vertical tracking wheel 2
-	, &h_track_wheel_1				// horiz tracking wheel 1
-	, nullptr						// horiz tracking wheel 2
-	, &inertial_sensor				// inertial sensor
-};
+lemlib::OdomSensors sensors(
+	nullptr					// vertical tracking wheel 1
+	, nullptr				// vertical tracking wheel 2
+	, &h_track_wheel_1		// horizontal tracking wheel 1
+	, nullptr				// horizontal tracking wheel 2
+	, &inertial_sensor
+);
 
-// i love PID!
+// lateral PID controller
+// started w/ kP 10, kD 3
+lemlib::ControllerSettings lateralController(
+	10 // proportional gain (kP)
+	, 0 // integral gain (kI)
+	, 4 // derivative gain (kD)
+	, 0 // anti windup
+	, 0 // small error range, in inches
+	, 0 // small error range timeout, in milliseconds
+	, 0 // large error range, in inches
+	, 0 // large error range timeout, in milliseconds
+	, 0 // maximum acceleration (slew)
+);
 
-// forward/backward PID
-// kP 5-> a lil hesitation; undershot tho
-// kP 7 -> GETS THERE!; a lil hesitation
-// kP 8 -> finally oscillation
-lemlib::ChassisController_t lateralController {
-    8, // kP
-    1, // kD
-    1, // smallErrorRange
-    100, // smallErrorTimeout
-    3, // largeErrorRange
-    500, // largeErrorTimeout
-    5 // slew rate
-};
- 
-// turning PID
-lemlib::ChassisController_t angularController {
-    4, // kP
-    40, // kD
-    1, // smallErrorRange
-    100, // smallErrorTimeout
-    3, // largeErrorRange
-    500, // largeErrorTimeout
-    0 // slew rate
-};
+// angular PID controller
+lemlib::ControllerSettings angularController(
+	2 // proportional gain (kP)
+	, 0 // integral gain (kI)
+	, 10 // derivative gain (kD)
+	, 3 // anti windup
+	, 1 // small error range, in degrees
+	, 100 // small error range timeout, in milliseconds
+	, 3 // large error range, in degrees
+	, 500 // large error range timeout, in milliseconds
+	, 0 // maximum acceleration (slew)
+);
 
 // actual lemlib chassis object
 lemlib::Chassis chassis(
@@ -102,11 +100,6 @@ lemlib::Chassis chassis(
 	, angularController
 	, sensors
 );
-
-struct Params {
-	lemlib::Chassis* myChassis;
-	pros::Rotation* myTrackWheel;
-};
 
 void tank() {
 	left_motors.move((controller.get_analog(ANALOG_LEFT_Y) / 127.0) * DRIVE_SPEED);
@@ -122,25 +115,22 @@ void arcade() {
 	right_motors.move(((move - turn) / 127.0) * DRIVE_SPEED);
 }
 
-void screenTaskFunc(void* params) {
-	Params* myParams = (Params *)params;
-	lemlib::Chassis* myChassis = (lemlib::Chassis *)(myParams->myChassis);
-	pros::Rotation* myTrackWheel = (pros::Rotation *)(myParams->myTrackWheel);
+void screenTaskFunc(void* chassis) {
+	lemlib::Chassis* myChassis = (lemlib::Chassis *)(chassis);
 
-	while (true) {
-		pros::lcd::print(1, "IMU Pos X: %f", myChassis->getPose().x);
-		pros::lcd::print(2, "IMU Pos Y: %f", myChassis->getPose().y);
-		pros::lcd::print(3, "IMU Theta: %f", myChassis->getPose().theta);
+	while (true)
+	{
+		pros::lcd::print(1, "Pos X (Relative): %f", myChassis->getPose().x);
+		pros::lcd::print(2, "Pos Y (Relative): %f", myChassis->getPose().y);
+		pros::lcd::print(3, "Bot Heading (Relative): %f", myChassis->getPose().theta);
 
 		pros::delay(20);
 	}
 }
 
-
 // ---------------------------------------------
 // --------- actual pros functions -------------
 // ---------------------------------------------
-
 
 /**
  * Runs initialization code. This occurs as soon as the program is started.
@@ -153,13 +143,11 @@ void initialize() {
 	chassis.calibrate();
 
 	pros::lcd::initialize();
-	
-	// resets tracking wheel rotation sensor
-	h_track_wheel_rot.reset_position();
 
-	Params params = {&chassis, &h_track_wheel_rot};
-
-	pros::Task screenTask(screenTaskFunc, &params);
+	pros::Task screenTask(
+		screenTaskFunc			// function that is the task
+		, &chassis				// pointer to parameter to task
+	);
 }
 
 /**
@@ -192,7 +180,7 @@ void competition_initialize() {}
  * from where it left off.
  */
 void autonomous() {
-	chassis.moveTo(0, -24, 1000);
+	chassis.moveToPoint(0, 24, 1000);
 }
 
 /**
@@ -211,15 +199,9 @@ void autonomous() {
 void opcontrol() {
 	while (true) {
 		// driver control -- tank bc codemygame is coding!
-		
+
 		arcade();
 
-		// printing stuff that i can't pass to screenTask for some dumb reason
-		pros::lcd::print(4, "Tracking Wheel Angle: %d", h_track_wheel_rot.get_angle() / 100);
-		pros::lcd::print(5, "Tracking Wheel Position: %d", h_track_wheel_rot.get_position() / 100);
-		pros::lcd::print(6, "Tracking Wheel Velocity: %d", h_track_wheel_rot.get_velocity());
-		pros::lcd::print(7, "IMU Heading: %f", inertial_sensor.get_heading());
-		
 		// delay so system resources don't go nyooom
 		pros::delay(20);
 	}
