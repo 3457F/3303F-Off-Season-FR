@@ -1,9 +1,11 @@
 // wheelbase 44.5cm / 17.5in
-// track width 12 and 13/16 in
+// track width 12 and 13/16 in (12.5 in)
 
 #include "main.h"
 #include "lemlib/api.hpp"
-#include <map>
+
+// debug
+bool runningLinearPIDTest = false;
 
 // constants
 const int DRIVE_SPEED = 127;
@@ -28,6 +30,8 @@ pros::Motor_Group right_motors({right_front, right_middle, right_back});
 // "tracking wheel" (rotation sensor) encoder definitions
 /** TODO: find port of rotation sensor! */
 pros::Rotation h_track_wheel_rot(18);
+
+pros::ADIEncoder v_track_wheel_adi('C', 'D');
 
 // inertial sensor definitions
 /** TODO: find port of inertial sensor! */
@@ -58,8 +62,14 @@ lemlib::TrackingWheel h_track_wheel_1(
 	, -0.25 				// vertical offset—ESSENTIALLY 0!
 );
 
+lemlib::TrackingWheel v_track_wheel_1(
+	&v_track_wheel_adi
+	, lemlib::Omniwheel::NEW_275
+	, -3.0625
+);
+
 lemlib::OdomSensors sensors(
-	nullptr					// vertical tracking wheel 1
+	&v_track_wheel_1		// vertical tracking wheel 1
 	, nullptr				// vertical tracking wheel 2
 	, &h_track_wheel_1		// horizontal tracking wheel 1
 	, nullptr				// horizontal tracking wheel 2
@@ -67,11 +77,11 @@ lemlib::OdomSensors sensors(
 );
 
 // lateral PID controller
-// started w/ kP 10, kD 3
+// kP 3, kD 0 -> gets there! bit drift but thas ok
 lemlib::ControllerSettings lateralController(
-	10 // proportional gain (kP)
+	4 // proportional gain (kP)
 	, 0 // integral gain (kI)
-	, 4 // derivative gain (kD)
+	, 0 // derivative gain (kD)
 	, 0 // anti windup
 	, 0 // small error range, in inches
 	, 0 // small error range timeout, in milliseconds
@@ -81,16 +91,32 @@ lemlib::ControllerSettings lateralController(
 );
 
 // angular PID controller
+// target is 90 deg, no oscillations!
+// kP 1 kD 0 -> no oscillate; overshoot (~101)
+// kP 2 kD 0 -> oscillate but good angle (~89.9)
+//    - kD 1 - 3; oscillate AND off by ~4-6 degrees
+//    - kD 5; oscillates LESS (~1 oscillation) (still off tho)
+//    - kD 7; not off (~1 degree)! one oscillation :D
+//	  - kD 9; not off (~2 degrees)! one oscillation + less :P
+//	  - kD 10; bit more off (5 deg); " w/ regards to oscillation
+//    - kD 12; "; NEGLIGIBLE OSCILLATION!
+// kP 3 kD 12 -> 88 deg; 1 oscillation
+//    - kD 14; not off (89 deg); 1 oscillation
+//    - kD 16; NOT OFF (~90); 1 oscillation
+//    - kD 18; "
+//    - kD 20; no (93 degrees); NEGLIGIBLE OSCILLATION!
+// kP 4 kD 20 -> 
+
 lemlib::ControllerSettings angularController(
-	2 // proportional gain (kP)
-	, 0 // integral gain (kI)
-	, 10 // derivative gain (kD)
-	, 3 // anti windup
-	, 1 // small error range, in degrees
-	, 100 // small error range timeout, in milliseconds
-	, 3 // large error range, in degrees
-	, 500 // large error range timeout, in milliseconds
-	, 0 // maximum acceleration (slew)
+	4 			// proportional gain (kP)
+	, 0 		// integral gain (kI)
+	, 20 		// derivative gain (kD)
+	, 0 		// anti windup
+	, 0 		// small error range, in degrees
+	, 0 		// small error range timeout, in milliseconds
+	, 0 		// large error range, in degrees
+	, 0 		// large error range timeout, in milliseconds
+	, 0 		// maximum acceleration (slew)
 );
 
 // actual lemlib chassis object
@@ -123,6 +149,11 @@ void screenTaskFunc(void* chassis) {
 		pros::lcd::print(1, "Pos X (Relative): %f", myChassis->getPose().x);
 		pros::lcd::print(2, "Pos Y (Relative): %f", myChassis->getPose().y);
 		pros::lcd::print(3, "Bot Heading (Relative): %f", myChassis->getPose().theta);
+		pros::lcd::print(4, "Current LINEAR kP: %f", lateralController.kP);
+		pros::lcd::print(5, "Current LINEAR kD: %f", lateralController.kD);
+		pros::lcd::print(6, "Current ANGULAR kP: %f", angularController.kP);
+		pros::lcd::print(7, "Current ANGULAR kD: %f", angularController.kD);
+		
 
 		pros::delay(20);
 	}
@@ -180,7 +211,27 @@ void competition_initialize() {}
  * from where it left off.
  */
 void autonomous() {
-	chassis.moveToPoint(0, 24, 1000);
+	// lemlib::MoveToPointParams moveToParams = {
+	// 	forwards: false
+	// 	, maxSpeed: 127
+	// 	, minSpeed: 0
+	// 	, earlyExitRange: 0
+	// };
+
+	// config
+	lemlib::TurnToHeadingParams turnToParams = {
+		direction: AngularDirection::AUTO
+		, maxSpeed: 127
+		, minSpeed: 0
+		, earlyExitRange: 0
+	};
+
+	
+	// actual auton
+	pros::delay(5000);
+
+	// chassis.moveToPoint(0, -24, 3000, moveToParams, false);
+	chassis.turnToHeading(90, 100000);
 }
 
 /**
