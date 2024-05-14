@@ -1,11 +1,53 @@
-// wheelbase 44.5cm / 17.5in
-// track width 12 and 13/16 in (12.5 in)
+/* comments for CODER's reference */
 
+// ---------- SIZE OF COMMENTS  -----------
+// ------- (FOR VARIABLE DOCSTRINGS) ------
+
+/**
+ * IMPORTS:
+*/
 #include "main.h"
 #include "lemlib/api.hpp"
+#include <cmath>
 
-// debug
+/**
+ * CONFIG VARS:
+*/
+// whether PID is being tuned, or normal
+// driver control should run
+bool tuningPID = true;
+// whether the physical PID tuner is being 
+// used, or P, I, and D values are being set
+// manually, through the C++ structs
+// `lateralController` and
+// `angularController`
+bool usingPhysicalPIDTuner = true;
+// if `tuningPID` is set to `true`, whether
+// LINEAR PID is being tuned, or ANGULAR
+// PID is being tuned
 bool runningLinearPIDTest = false;
+
+
+/**
+ * RUNTIME VARS: (**DO NOT MODIFY**)
+*/
+// if `tuningPID` is set to `true`, whether
+// the robot is CURRENTLY running a test
+// auton with target kP and kD values!
+bool runningPIDTest = false;
+// represents the TARGET (NOT actual) kP,
+// that you want to be set
+int kp_target = 0;
+// represents the TARGET (NOT actual) kD,
+// that you want to be set
+int kd_target = 0;
+
+lemlib::MoveToPointParams linearPIDTestMoveToPointParams = {
+	forwards: false
+	, maxSpeed: 127
+	, minSpeed: 0
+	, earlyExitRange: 0
+};
 
 // constants
 const int DRIVE_SPEED = 127;
@@ -32,6 +74,10 @@ pros::Motor_Group right_motors({right_front, right_middle, right_back});
 pros::Rotation h_track_wheel_rot(18);
 
 pros::ADIEncoder v_track_wheel_adi('C', 'D');
+
+pros::ADIEncoder kp_tuner('A', 'B');
+
+pros::ADIEncoder kd_tuner('G', 'H', true);
 
 // inertial sensor definitions
 /** TODO: find port of inertial sensor! */
@@ -77,9 +123,8 @@ lemlib::OdomSensors sensors(
 );
 
 // lateral PID controller
-// kP 3, kD 0 -> gets there! bit drift but thas ok
 lemlib::ControllerSettings lateralController(
-	4 // proportional gain (kP)
+	1 // proportional gain (kP)
 	, 0 // integral gain (kI)
 	, 0 // derivative gain (kD)
 	, 0 // anti windup
@@ -91,26 +136,10 @@ lemlib::ControllerSettings lateralController(
 );
 
 // angular PID controller
-// target is 90 deg, no oscillations!
-// kP 1 kD 0 -> no oscillate; overshoot (~101)
-// kP 2 kD 0 -> oscillate but good angle (~89.9)
-//    - kD 1 - 3; oscillate AND off by ~4-6 degrees
-//    - kD 5; oscillates LESS (~1 oscillation) (still off tho)
-//    - kD 7; not off (~1 degree)! one oscillation :D
-//	  - kD 9; not off (~2 degrees)! one oscillation + less :P
-//	  - kD 10; bit more off (5 deg); " w/ regards to oscillation
-//    - kD 12; "; NEGLIGIBLE OSCILLATION!
-// kP 3 kD 12 -> 88 deg; 1 oscillation
-//    - kD 14; not off (89 deg); 1 oscillation
-//    - kD 16; NOT OFF (~90); 1 oscillation
-//    - kD 18; "
-//    - kD 20; no (93 degrees); NEGLIGIBLE OSCILLATION!
-// kP 4 kD 20 -> 
-
 lemlib::ControllerSettings angularController(
-	4 			// proportional gain (kP)
+	1 			// proportional gain (kP)
 	, 0 		// integral gain (kI)
-	, 20 		// derivative gain (kD)
+	, 0 		// derivative gain (kD)
 	, 0 		// anti windup
 	, 0 		// small error range, in degrees
 	, 0 		// small error range timeout, in milliseconds
@@ -144,17 +173,49 @@ void arcade() {
 void screenTaskFunc(void* chassis) {
 	lemlib::Chassis* myChassis = (lemlib::Chassis *)(chassis);
 
-	while (true)
-	{
+	while (true) {
+		// only allows you to physically tune PID
+		// if `tuningPID` is set to `true`
+		if (tuningPID) {
+			kp_target = round(kp_tuner.get_value() / 100);
+			kd_target = round(kd_tuner.get_value() / 100);
+		}
+
+		pros::lcd::print(0, "Running PID Test? %s", runningPIDTest ? "YES" : "NO");
+
 		pros::lcd::print(1, "Pos X (Relative): %f", myChassis->getPose().x);
 		pros::lcd::print(2, "Pos Y (Relative): %f", myChassis->getPose().y);
 		pros::lcd::print(3, "Bot Heading (Relative): %f", myChassis->getPose().theta);
-		pros::lcd::print(4, "Current LINEAR kP: %f", lateralController.kP);
-		pros::lcd::print(5, "Current LINEAR kD: %f", lateralController.kD);
-		pros::lcd::print(6, "Current ANGULAR kP: %f", angularController.kP);
-		pros::lcd::print(7, "Current ANGULAR kD: %f", angularController.kD);
-		
 
+		// printing target and actual kP, kD values
+		pros::lcd::print(
+			4
+			, "TARGET %s kP: %i"
+			, runningLinearPIDTest ? "LINEAR" : "ANGULAR"
+			, kp_target
+		);
+
+		pros::lcd::print(
+			5
+			, "TARGET %s kD: %i"
+			, runningLinearPIDTest ? "LINEAR" : "ANGULAR"
+			, kd_target
+		);
+
+		pros::lcd::print(
+			6
+			, "CURRENT %s kP: %f"
+			, runningLinearPIDTest ? "LINEAR" : "ANGULAR"
+			, runningLinearPIDTest ? lateralController.kP : angularController.kP 
+		);
+
+		pros::lcd::print(
+			7
+			, "CURRENT %s kD: %f"
+			, runningLinearPIDTest ? "LINEAR" : "ANGULAR"
+			, runningLinearPIDTest ? lateralController.kD : angularController.kD 
+		);
+		
 		pros::delay(20);
 	}
 }
@@ -210,29 +271,7 @@ void competition_initialize() {}
  * will be stopped. Re-enabling the robot will restart the task, not re-start it
  * from where it left off.
  */
-void autonomous() {
-	// lemlib::MoveToPointParams moveToParams = {
-	// 	forwards: false
-	// 	, maxSpeed: 127
-	// 	, minSpeed: 0
-	// 	, earlyExitRange: 0
-	// };
-
-	// config
-	lemlib::TurnToHeadingParams turnToParams = {
-		direction: AngularDirection::AUTO
-		, maxSpeed: 127
-		, minSpeed: 0
-		, earlyExitRange: 0
-	};
-
-	
-	// actual auton
-	pros::delay(5000);
-
-	// chassis.moveToPoint(0, -24, 3000, moveToParams, false);
-	chassis.turnToHeading(90, 100000);
-}
+void autonomous() {}
 
 /**
  * Runs the operator control code. This function will be started in its own task
@@ -248,12 +287,53 @@ void autonomous() {
  * task, not resume it from where it left off.
  */
 void opcontrol() {
-	while (true) {
-		// driver control -- tank bc codemygame is coding!
+	if (!tuningPID) {
+		while (true) {
+			// driver control -- tank bc codemygame is coding!
 
-		arcade();
+			arcade();
 
-		// delay so system resources don't go nyooom
-		pros::delay(20);
+			// delay so system resources don't go nyooom
+			pros::delay(20);
+		}	
+	} else {
+		// if we're tuning PID
+
+		while (true) {
+			// checks if the `A` button has been NEWLY pressed
+			// (i.e. does not fire multiple times if the `A`
+			// button is HELD)
+			bool A_new_press = controller.get_digital_new_press(DIGITAL_A);
+
+			// if A is pressed, and the test auton is not currently running
+			if (A_new_press && !runningPIDTest) {
+				runningPIDTest = true;
+
+				// based on whether linear/angular
+				// PID is being tuned, set the corresponding
+				// kP, kD values and run the corresponding
+				// test auton
+				if (runningLinearPIDTest) {
+					if (usingPhysicalPIDTuner) {
+						lateralController.kP = kp_target;
+						lateralController.kD = kd_target;
+					}
+
+					chassis.moveToPoint(0, -24, 3000, linearPIDTestMoveToPointParams, false);
+				} else {
+					if (usingPhysicalPIDTuner) {
+						angularController.kP = kp_target;
+						angularController.kD = kd_target;
+					}
+
+					chassis.turnToHeading(90, 1500, {}, false);
+				}
+
+				runningPIDTest = false;
+			}
+
+			// delay to save system resources
+			pros::delay(20);
+		}
 	}
 }
