@@ -6,9 +6,11 @@
 /**
  * IMPORTS:
 */
-#include "main.h"
-#include "lemlib/api.hpp"
 #include <cmath>
+
+#include "main.h"
+
+#include "lemlib/api.hpp"
 
 /**
  * CONFIG VARS:
@@ -181,7 +183,24 @@ void screenTaskFunc(void* chassis) {
 			kd_target = round(kd_tuner.get_value() / 100);
 		}
 
-		pros::lcd::print(0, "Running PID Test? %s", runningPIDTest ? "YES" : "NO");
+		char runningPIDTestBufferString[20];
+
+		// the space in the format string is important... don't delete it!
+		std::snprintf(
+			runningPIDTestBufferString
+			, sizeof(runningPIDTestBufferString)
+			, " PID Test? %s"
+			, runningPIDTest ? "YES" : "NO"
+		);
+
+		// first value: whether tuning PID / normal driver control is enabled
+		// second value: if tuning PID, whether test PID auton running or not
+		pros::lcd::print(
+			0
+			, "Tuning? %s%s"
+			, tuningPID ? "YES" : "NO"
+			, tuningPID ? runningPIDTestBufferString : ""
+		);
 
 		pros::lcd::print(1, "Pos X (Relative): %f", myChassis->getPose().x);
 		pros::lcd::print(2, "Pos Y (Relative): %f", myChassis->getPose().y);
@@ -287,19 +306,34 @@ void autonomous() {}
  * task, not resume it from where it left off.
  */
 void opcontrol() {
-	if (!tuningPID) {
-		while (true) {
-			// driver control -- tank bc codemygame is coding!
+	// opcontrol runs forever! (while in driver control; it's its own task so we gucci)
+	while (true) {
+		if (!tuningPID) {
+			/* normal driver control */
 
+			// allows for toggling between tuning PID and driver control
+			bool B_new_press = controller.get_digital_new_press(DIGITAL_B);
+
+			printf("Is B pressed (not tuning PID mode): %i\n", B_new_press);
+
+			if (B_new_press) {
+				tuningPID = true;
+			}
+
+			// replace with tank() if u really don't like tank that much
 			arcade();
+		} else {
+			/* tuning PID! wee! */
 
-			// delay so system resources don't go nyooom
-			pros::delay(20);
-		}	
-	} else {
-		// if we're tuning PID
+			// toggle between tuning PID and driver control
+			bool B_new_press = controller.get_digital_new_press(DIGITAL_B);
 
-		while (true) {
+			printf("Is B pressed (tuning PID mode): %i\n", B_new_press);
+
+			if (B_new_press) {
+				tuningPID = false;
+			}
+
 			// checks if the `A` button has been NEWLY pressed
 			// (i.e. does not fire multiple times if the `A`
 			// button is HELD)
@@ -308,6 +342,10 @@ void opcontrol() {
 			// if A is pressed, and the test auton is not currently running
 			if (A_new_press && !runningPIDTest) {
 				runningPIDTest = true;
+
+				// makes sure PID constants are not negative!
+				kp_target = abs(kp_target);
+				kd_target = abs(kd_target);
 
 				// based on whether linear/angular
 				// PID is being tuned, set the corresponding
@@ -319,6 +357,9 @@ void opcontrol() {
 						lateralController.kD = kd_target;
 					}
 
+					// resets position before runs, in case test auton is being run multiple times
+					chassis.setPose(0, 0, 0);
+
 					chassis.moveToPoint(0, -24, 3000, linearPIDTestMoveToPointParams, false);
 				} else {
 					if (usingPhysicalPIDTuner) {
@@ -326,14 +367,17 @@ void opcontrol() {
 						angularController.kD = kd_target;
 					}
 
+					// resets heading before runs
+					chassis.setPose(0, 0, 0);
+
 					chassis.turnToHeading(90, 1500, {}, false);
 				}
 
 				runningPIDTest = false;
 			}
-
-			// delay to save system resources
-			pros::delay(20);
 		}
+
+		// delay to save system resources
+		pros::delay(20);
 	}
 }
