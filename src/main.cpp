@@ -77,9 +77,9 @@ pros::Rotation h_track_wheel_rot(18);
 
 pros::ADIEncoder v_track_wheel_adi('C', 'D');
 
-pros::ADIEncoder kp_tuner('A', 'B');
+pros::ADIEncoder kp_tuner('A', 'B', true);
 
-pros::ADIEncoder kd_tuner('G', 'H', true);
+pros::ADIEncoder kd_tuner('G', 'H');
 
 // inertial sensor definitions
 /** TODO: find port of inertial sensor! */
@@ -176,7 +176,7 @@ void screenTaskFunc(void* chassis) {
 	lemlib::Chassis* myChassis = (lemlib::Chassis *)(chassis);
 
 	while (true) {
-		// only allows you to physically tune PID
+		// only enables functionality of physical PID tuner
 		// if `tuningPID` is set to `true`
 		if (tuningPID) {
 			kp_target = round(kp_tuner.get_value() / 100);
@@ -225,14 +225,14 @@ void screenTaskFunc(void* chassis) {
 			6
 			, "CURRENT %s kP: %f"
 			, runningLinearPIDTest ? "LINEAR" : "ANGULAR"
-			, runningLinearPIDTest ? lateralController.kP : angularController.kP 
+			, runningLinearPIDTest ? myChassis->lateralPID.kP : myChassis->angularPID.kP 
 		);
 
 		pros::lcd::print(
 			7
 			, "CURRENT %s kD: %f"
 			, runningLinearPIDTest ? "LINEAR" : "ANGULAR"
-			, runningLinearPIDTest ? lateralController.kD : angularController.kD 
+			, runningLinearPIDTest ? myChassis->lateralPID.kD : myChassis->angularPID.kD
 		);
 		
 		pros::delay(20);
@@ -353,8 +353,8 @@ void opcontrol() {
 				// test auton
 				if (runningLinearPIDTest) {
 					if (usingPhysicalPIDTuner) {
-						lateralController.kP = kp_target;
-						lateralController.kD = kd_target;
+						chassis.lateralPID.kP = kp_target;
+						chassis.lateralPID.kD = kd_target;
 					}
 
 					// resets position before runs, in case test auton is being run multiple times
@@ -363,8 +363,8 @@ void opcontrol() {
 					chassis.moveToPoint(0, -24, 3000, linearPIDTestMoveToPointParams, false);
 				} else {
 					if (usingPhysicalPIDTuner) {
-						angularController.kP = kp_target;
-						angularController.kD = kd_target;
+						chassis.angularPID.kP = kp_target;
+						chassis.angularPID.kD = kd_target;
 					}
 
 					// resets heading before runs
