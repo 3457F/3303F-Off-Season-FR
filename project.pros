@@ -353,7 +353,8 @@
     "upload_options": {
       "description": "PURELY for tuning PID constants (on the odometry chassis!)",
       "icon": "X",
-      "slot": 2
+      "slot": 2,
+      "after": "screen"
     },
     "use_early_access": false
   }
