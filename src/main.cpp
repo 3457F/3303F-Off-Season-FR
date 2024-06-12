@@ -33,9 +33,17 @@ pros::Motor right_middle(-14);
 pros::Motor right_back(-5);
 
 // motor GROUP definitions
-pros::Motor_Group left_motors({left_front, left_middle, left_back});
+pros::MotorGroup left_motors({
+	19		// left_front
+	, 20	// left_middle
+	, 9		// left_back
+});
 
-pros::Motor_Group right_motors({right_front, right_middle, right_back});
+pros::MotorGroup right_motors({
+	-15		// right_front
+	, -14	// right_middle
+	, -5	// right_back
+});
 
 // "tracking wheel" (rotation sensor) encoder definitions
 /** TODO: find port of rotation sensor! */
