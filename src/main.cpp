@@ -12,45 +12,6 @@
 
 #include "lemlib/api.hpp"
 
-/**
- * CONFIG VARS:
-*/
-// whether PID is being tuned, or normal
-// driver control should run
-bool tuningPID = true;
-// whether the physical PID tuner is being 
-// used, or P, I, and D values are being set
-// manually, through the C++ structs
-// `lateralController` and
-// `angularController`
-bool usingPhysicalPIDTuner = true;
-// if `tuningPID` is set to `true`, whether
-// LINEAR PID is being tuned, or ANGULAR
-// PID is being tuned
-bool runningLinearPIDTest = false;
-
-
-/**
- * RUNTIME VARS: (**DO NOT MODIFY**)
-*/
-// if `tuningPID` is set to `true`, whether
-// the robot is CURRENTLY running a test
-// auton with target kP and kD values!
-bool runningPIDTest = false;
-// represents the TARGET (NOT actual) kP,
-// that you want to be set
-int kp_target = 0;
-// represents the TARGET (NOT actual) kD,
-// that you want to be set
-int kd_target = 0;
-
-lemlib::MoveToPointParams linearPIDTestMoveToPointParams = {
-	forwards: false
-	, maxSpeed: 127
-	, minSpeed: 0
-	, earlyExitRange: 0
-};
-
 // constants
 const int DRIVE_SPEED = 127;
 
@@ -92,15 +53,6 @@ pros::ADIEncoder kd_tuner('G', 'H');
 // inertial sensor definitions
 /** TODO: find port of inertial sensor! */
 pros::Imu inertial_sensor(17);
-
-// // LemLib structs
-// lemlib::Drivetrain_t drivetrain {
-// 	&left_motors
-// 	, &right_motors
-// 	, 12.5				// width in inches!
-// 	, 4.125				// 4" omni-wheels
-// 	, 600				// blue cartridge (600 rpm) - direct drive
-// };
 
 lemlib::Drivetrain drivetrain{
 	&left_motors
@@ -180,73 +132,6 @@ void arcade() {
 	right_motors.move(((move - turn) / 127.0) * DRIVE_SPEED);
 }
 
-void screenTaskFunc(void* chassis) {
-	lemlib::Chassis* myChassis = (lemlib::Chassis *)(chassis);
-
-	while (true) {
-		// only enables functionality of physical PID tuner
-		// if `tuningPID` is set to `true`
-		if (tuningPID) {
-			kp_target = round(kp_tuner.get_value() / 100);
-			kd_target = round(kd_tuner.get_value() / 100);
-		}
-
-		char runningPIDTestBufferString[20];
-
-		// the space in the format string is important... don't delete it!
-		std::snprintf(
-			runningPIDTestBufferString
-			, sizeof(runningPIDTestBufferString)
-			, " PID Test? %s"
-			, runningPIDTest ? "YES" : "NO"
-		);
-
-		// first value: whether tuning PID / normal driver control is enabled
-		// second value: if tuning PID, whether test PID auton running or not
-		pros::lcd::print(
-			0
-			, "Tuning? %s%s"
-			, tuningPID ? "YES" : "NO"
-			, tuningPID ? runningPIDTestBufferString : ""
-		);
-
-		pros::lcd::print(1, "Pos X (Relative): %f", myChassis->getPose().x);
-		pros::lcd::print(2, "Pos Y (Relative): %f", myChassis->getPose().y);
-		pros::lcd::print(3, "Bot Heading (Relative): %f", myChassis->getPose().theta);
-
-		// printing target and actual kP, kD values
-		pros::lcd::print(
-			4
-			, "TARGET %s kP: %i"
-			, runningLinearPIDTest ? "LINEAR" : "ANGULAR"
-			, kp_target
-		);
-
-		pros::lcd::print(
-			5
-			, "TARGET %s kD: %i"
-			, runningLinearPIDTest ? "LINEAR" : "ANGULAR"
-			, kd_target
-		);
-
-		pros::lcd::print(
-			6
-			, "CURRENT %s kP: %f"
-			, runningLinearPIDTest ? "LINEAR" : "ANGULAR"
-			, runningLinearPIDTest ? myChassis->lateralPID.kP : myChassis->angularPID.kP 
-		);
-
-		pros::lcd::print(
-			7
-			, "CURRENT %s kD: %f"
-			, runningLinearPIDTest ? "LINEAR" : "ANGULAR"
-			, runningLinearPIDTest ? myChassis->lateralPID.kD : myChassis->angularPID.kD
-		);
-		
-		pros::delay(20);
-	}
-}
-
 // ---------------------------------------------
 // --------- actual pros functions -------------
 // ---------------------------------------------
@@ -262,11 +147,6 @@ void initialize() {
 	chassis.calibrate();
 
 	pros::lcd::initialize();
-
-	pros::Task screenTask(
-		screenTaskFunc			// function that is the task
-		, &chassis				// pointer to parameter to task
-	);
 }
 
 /**
@@ -313,79 +193,4 @@ void autonomous() {}
  * operator control task will be stopped. Re-enabling the robot will restart the
  * task, not resume it from where it left off.
  */
-void opcontrol() {
-	// opcontrol runs forever! (while in driver control; it's its own task so we gucci)
-	while (true) {
-		if (!tuningPID) {
-			/* normal driver control */
-
-			// allows for toggling between tuning PID and driver control
-			bool B_new_press = controller.get_digital_new_press(DIGITAL_B);
-
-			printf("Is B pressed (not tuning PID mode): %i\n", B_new_press);
-
-			if (B_new_press) {
-				tuningPID = true;
-			}
-
-			// replace with tank() if u really don't like tank that much
-			arcade();
-		} else {
-			/* tuning PID! wee! */
-
-			// toggle between tuning PID and driver control
-			bool B_new_press = controller.get_digital_new_press(DIGITAL_B);
-
-			printf("Is B pressed (tuning PID mode): %i\n", B_new_press);
-
-			if (B_new_press) {
-				tuningPID = false;
-			}
-
-			// checks if the `A` button has been NEWLY pressed
-			// (i.e. does not fire multiple times if the `A`
-			// button is HELD)
-			bool A_new_press = controller.get_digital_new_press(DIGITAL_A);
-
-			// if A is pressed, and the test auton is not currently running
-			if (A_new_press && !runningPIDTest) {
-				runningPIDTest = true;
-
-				// makes sure PID constants are not negative!
-				kp_target = abs(kp_target);
-				kd_target = abs(kd_target);
-
-				// based on whether linear/angular
-				// PID is being tuned, set the corresponding
-				// kP, kD values and run the corresponding
-				// test auton
-				if (runningLinearPIDTest) {
-					if (usingPhysicalPIDTuner) {
-						chassis.lateralPID.kP = kp_target;
-						chassis.lateralPID.kD = kd_target;
-					}
-
-					// resets position before runs, in case test auton is being run multiple times
-					chassis.setPose(0, 0, 0);
-
-					chassis.moveToPoint(0, -24, 3000, linearPIDTestMoveToPointParams, false);
-				} else {
-					if (usingPhysicalPIDTuner) {
-						chassis.angularPID.kP = kp_target;
-						chassis.angularPID.kD = kd_target;
-					}
-
-					// resets heading before runs
-					chassis.setPose(0, 0, 0);
-
-					chassis.turnToHeading(90, 1500, {}, false);
-				}
-
-				runningPIDTest = false;
-			}
-		}
-
-		// delay to save system resources
-		pros::delay(20);
-	}
-}
+void opcontrol() {}
