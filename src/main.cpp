@@ -12,6 +12,8 @@
 
 #include "lemlib/api.hpp"
 
+#include "liblvgl/lvgl.h"
+
 // constants
 const int DRIVE_SPEED = 127;
 
@@ -132,6 +134,83 @@ void arcade() {
 	right_motors.move(((move - turn) / 127.0) * DRIVE_SPEED);
 }
 
+// lv_obj_t* home_screen = lv_obj_create(NULL);
+Screen home_screen = Screen();
+lv_obj_t* robot_central_screen = lv_obj_create(NULL);
+pros::Motor test_motor(10);
+
+void temperature_btn_cb(lv_event_t* e) {
+	lv_obj_t* robot_central_screen = (lv_obj_t*)lv_event_get_user_data(e);
+	lv_scr_load(robot_central_screen);
+}
+
+void update_test_motor_1(lv_timer_t* timer) {
+	lv_obj_t* test_motor_1_label = (lv_obj_t*)timer->user_data;
+
+	const char* temp_string = "Value: %.2f";
+	char value_str[32];
+	snprintf(value_str, sizeof(value_str), temp_string, test_motor.get_temperature());
+
+	lv_label_set_text(test_motor_1_label, value_str);
+}
+
+void brain_gui() {
+	lv_obj_t* team_obj = home_screen.add_obj(
+		nullptr
+
+		, 10	// x
+		, 10	// y
+		
+		, 200	// w
+		, 50	// h
+	);
+
+	lv_obj_t* team_label = home_screen.add_label(
+		team_obj
+		, "3457F Fuse"
+		, true
+	);
+
+	lv_obj_t* temperature_btn = home_screen.add_btn(
+		nullptr
+
+		, 10
+		, 150
+
+		, 150
+		, 50
+
+		, temperature_btn_cb
+		, LV_EVENT_CLICKED
+		, robot_central_screen
+	);
+
+	lv_obj_t* temperature_btn = lv_btn_create(home_screen);
+	lv_obj_set_pos(temperature_btn, 10, 150);
+	lv_obj_set_size(temperature_btn, 150, 50);
+	lv_obj_add_event_cb(temperature_btn, temperature_btn_cb, LV_EVENT_CLICKED, robot_central_screen);
+
+	lv_obj_t* temperature_label = lv_label_create(temperature_btn);
+	lv_obj_center(temperature_label);
+
+	lv_obj_t* test_motor_1_obj = lv_obj_create(robot_central_screen);
+	lv_obj_set_pos(test_motor_1_obj, 10, 10);
+	lv_obj_set_size(test_motor_1_obj, 130, 60);
+
+	lv_obj_t* test_motor_1_label = lv_label_create(test_motor_1_obj);
+	lv_obj_center(test_motor_1_label);
+
+	lv_timer_t* test_motor_1_timer = lv_timer_create(update_test_motor_1, 20, test_motor_1_label);
+	
+	// while (1) {
+	// 	lv_task_handler();
+	// 	lv_label_set_text_fmt(test_motor_1_label, "Motor Temperature: %f", test_motor.get_temperature());
+	// 	pros::delay(20);
+	// }
+
+	lv_scr_load(home_screen);	
+}
+
 // ---------------------------------------------
 // --------- actual pros functions -------------
 // ---------------------------------------------
@@ -146,7 +225,7 @@ void initialize() {
 	// LEAVE THIS HERE
 	chassis.calibrate();
 
-	pros::lcd::initialize();
+	lv_init();
 }
 
 /**
@@ -165,7 +244,9 @@ void disabled() {}
  * This task will exit when the robot is enabled and autonomous or opcontrol
  * starts.
  */
-void competition_initialize() {}
+void competition_initialize() {
+	
+}
 
 /**
  * Runs the user autonomous code. This function will be started in its own task
@@ -193,4 +274,7 @@ void autonomous() {}
  * operator control task will be stopped. Re-enabling the robot will restart the
  * task, not resume it from where it left off.
  */
-void opcontrol() {}
+void opcontrol() {
+	// pros::Task brainGui(brain_gui);
+	brain_gui();
+}
