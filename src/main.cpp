@@ -136,7 +136,7 @@ void arcade() {
 
 // lv_obj_t* home_screen = lv_obj_create(NULL);
 Screen home_screen = Screen();
-lv_obj_t* robot_central_screen = lv_obj_create(NULL);
+Screen robot_central_screen = Screen();
 pros::Motor test_motor(10);
 
 void temperature_btn_cb(lv_event_t* e) {
@@ -144,15 +144,15 @@ void temperature_btn_cb(lv_event_t* e) {
 	lv_scr_load(robot_central_screen);
 }
 
-void update_test_motor_1(lv_timer_t* timer) {
-	lv_obj_t* test_motor_1_label = (lv_obj_t*)timer->user_data;
+// void update_test_motor_1(lv_timer_t* timer) {
+// 	lv_obj_t* test_motor_1_label = (lv_obj_t*)timer->user_data;
 
-	const char* temp_string = "Value: %.2f";
-	char value_str[32];
-	snprintf(value_str, sizeof(value_str), temp_string, test_motor.get_temperature());
+// 	const char* temp_string = "Value: %.2f";
+// 	char value_str[32];
+// 	snprintf(value_str, sizeof(value_str), temp_string, test_motor.get_temperature());
 
-	lv_label_set_text(test_motor_1_label, value_str);
-}
+// 	lv_label_set_text(test_motor_1_label, value_str);
+// }
 
 void brain_gui() {
 	lv_obj_t* team_obj = home_screen.add_obj(
@@ -182,33 +182,32 @@ void brain_gui() {
 
 		, temperature_btn_cb
 		, LV_EVENT_CLICKED
-		, robot_central_screen
+		, robot_central_screen.get_screen()
 	);
 
-	lv_obj_t* temperature_btn = lv_btn_create(home_screen);
-	lv_obj_set_pos(temperature_btn, 10, 150);
-	lv_obj_set_size(temperature_btn, 150, 50);
-	lv_obj_add_event_cb(temperature_btn, temperature_btn_cb, LV_EVENT_CLICKED, robot_central_screen);
+	lv_obj_t* temperature_label = Screen::add_label(
+		temperature_btn
+		, "View Robot Temperatures"
+		, true
+	);
 
-	lv_obj_t* temperature_label = lv_label_create(temperature_btn);
-	lv_obj_center(temperature_label);
+	lv_obj_t* test_motor_1_obj = robot_central_screen.add_obj(
+		nullptr
 
-	lv_obj_t* test_motor_1_obj = lv_obj_create(robot_central_screen);
-	lv_obj_set_pos(test_motor_1_obj, 10, 10);
-	lv_obj_set_size(test_motor_1_obj, 130, 60);
+		, 10
+		, 10
 
-	lv_obj_t* test_motor_1_label = lv_label_create(test_motor_1_obj);
-	lv_obj_center(test_motor_1_label);
+		, 130
+		, 60
+	);
 
-	lv_timer_t* test_motor_1_timer = lv_timer_create(update_test_motor_1, 20, test_motor_1_label);
-	
-	// while (1) {
-	// 	lv_task_handler();
-	// 	lv_label_set_text_fmt(test_motor_1_label, "Motor Temperature: %f", test_motor.get_temperature());
-	// 	pros::delay(20);
-	// }
+	lv_obj_t* test_motor_1_label = Screen::add_label(
+		test_motor_1_obj
+		, "motor 1 check"
+		, true
+	);
 
-	lv_scr_load(home_screen);	
+	lv_scr_load(home_screen.get_screen());	
 }
 
 // ---------------------------------------------

@@ -4,6 +4,27 @@ Screen::Screen() {
     screen = lv_obj_create(NULL);
 }
 
+
+lv_obj_t* Screen::add_label(
+    lv_obj_t* obj
+    , const char* text
+    , bool align
+) {
+    lv_obj_t* new_label = lv_label_create(obj);
+    lv_label_set_text(new_label, text);
+
+    if (align) {
+        lv_obj_center(new_label);
+    }
+
+    return new_label;
+}
+
+
+lv_obj_t* Screen::get_screen() {
+    return screen;
+}
+
 lv_obj_t* Screen::get_parent(
     lv_obj_t* parent
 ) {
@@ -27,19 +48,6 @@ lv_obj_t* Screen::add_obj(
     lv_obj_set_size(new_obj, w, h);
 
     return new_obj;
-}
-
-lv_obj_t* Screen::add_label(
-    lv_obj_t* obj
-    , const char* text
-    , bool align
-) {
-    lv_obj_t* new_label = lv_label_create(obj);
-    lv_label_set_text(new_label, text);
-
-    if (align) {
-        lv_obj_center(new_label);
-    }
 }
 
 lv_obj_t* Screen::add_btn(
